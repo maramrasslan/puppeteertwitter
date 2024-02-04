@@ -11,29 +11,35 @@ function timeout(millieseconds){
     })
 }
 
+//extract date 
+async function extractDate(page){
+    await timeout(1000);
+    await page.waitForSelector('[data-testid=\"tweet\"] [data-testid=\"User-Name\"] ');
+    const extractedDates = page.evaluate(()=> Array.from(
+        document.querySelectorAll("[data-testid=\"tweet\"] [data-testid=\"User-Name\"] a[role=\"link\"] time[datetime]")
+    ).map(element => element.dateTime) );
+    return extractedDates
+}
 //extract tweet link and date
 async function extractTlinkTdate(page){
     await timeout(1000);
     await page.evaluate(() => {
         window.scrollBy(0,1000);
-    })
-    await timeout(1000);
-    await page.waitForSelector('[data-testid=\"tweet\"] [data-testid=\"User-Name\"]');
-    const extractedDates = page.evaluate(()=> Array.from(
-        document.querySelectorAll("[data-testid=\"tweet\"] [data-testid=\"User-Name\"] a[role=\"link\"] time[datetime]")
-    ).map(element => element.dateTime) );
-    console.log(extractedDates);
+    })   
     //extract all 3 links
     await timeout(1000);
+    await page.waitForSelector('[data-testid=\"tweet\"] [data-testid=\"User-Name\"]');
     const extractedLINKS = page.evaluate(()=> Array.from(
         document.querySelectorAll("[data-testid=\"tweet\"] [data-testid=\"User-Name\"] a[role=\"link\"]") 
     ).map(tweet => tweet.href) );
     //extract only the third link to get the tweet link
     let extractedLinks = [];
-    for(i=2;i<extractedLINKS.length;i=i+3){
-        extractedLinks.push(extractedLINKS[i]);
+    for(i=2;i<(await eval(extractedLINKS)).length;i=i+3){
+        extractedLinks.push((await eval(extractedLINKS))[i]);
     }
     //add date and link to array of objects
+    var extractedDates=[];
+    extractedDates = await eval(extractDate(page));
     var linkDateList = [];
     for(i=0;i<extractedLinks.length;i++){
         var obj = {TweetLink:extractedLinks[i],TweetDate:extractedDates[i]};
@@ -55,7 +61,11 @@ async function extractItems(page){
     //add text to the objects 
     var extractedTweets=[];
     for(i=0;i<resultDateLink.length;i++){
-        var newObj = (resultDateLink[i].TweetText=extractedItemsText[i]);
+        var newObj = {
+            TweetLink:resultDateLink[i].TweetLink,
+            TweetDate:resultDateLink[i].TweetDate,
+            TweetText:(await eval(extractedItemsText))[i]
+        };
         extractedTweets.push(newObj);
     }
    
