@@ -1,6 +1,7 @@
 const fs = require("fs")
 const puppeteer = require("puppeteer");
-const cheerio = require("cheerio");
+//const cheerio = require("cheerio");
+
 
 
 //timeout function
@@ -9,6 +10,25 @@ function timeout(millieseconds){
     return new Promise((resolve) => {
         setTimeout(() => {resolve()},millieseconds)
     })
+}
+
+//object to csv function 
+
+function objectToCsv(data) {
+     
+    const csvRows = [];
+    const headers = Object.keys(data[0]);
+    csvRows.push(headers.join(','));
+    for (const row of data) {
+        const values = headers.map(header => {
+            const val = row[header]
+            return `"${val}"`;
+        });
+ 
+        // To add, separator between each value
+        csvRows.push(values.join(','));
+    }
+    return csvRows.join('\n');
 }
 
 //extract date 
@@ -48,7 +68,7 @@ async function extractTlinkTdate(page){
     return linkDateList;
 }
 
-//extract tweet text
+//extract tweet text date and link
 async function extractItems(page){
     await timeout(1000);
     var resultDateLink =[];
@@ -83,34 +103,97 @@ async function extractItems(page){
 /* I should make an object that has tweet text and date and store in array 
  * with the key being the tweet link , and make the while loop inside the function not in main*/
 
-async function main(url){
+async function SearchByProfile(username,loopLimit,keyword,startDate,endDate,startTime,endTime){
     try {
+        //setup profile page 
+        const url = `https://twitter.com/${username}`;
         const browser = await puppeteer.launch({headless: false});
         var page = await browser.newPage();
-        //await page.setDefaultNavigationTimeout(0);
         await page.goto(url);
         await timeout(3000);
-        //const html = await page.evaluate(() => document.body.innerHTML);
-        //const $ = await cheerio.load(html);
+        //const and vars 
+        const defaultLimit = 10;
         var resultTweet = [];
-        const loopLimit = 10;
-        var loopCount = 0;
-        while(resultTweet.length < loopLimit){
+        var output =[];
+        var foundKeyword = false;
+        var foundDate = false;
+        var foundTime = false;
+        if(loopLimit==null){loopLimit=defaultLimit;}
+
+        while(output.length < loopLimit){
             await timeout(2000);
             resultTweet= await eval(extractItems(page)); //eval to solve Error: Passed function cannot be serialized!
-            console.log(resultTweet);
-            loopCount++ ;
+            for(const tweet of resultTweet){
+                let index = output.findIndex((item) => item.TweetLink === tweet.TweetLink);
+                //logic to find the keyword in the text
+                var tweettext = (tweet.TweetText).toLowerCase();
+                keyword = keyword.toLowerCase();
+                if((tweettext.indexOf(keyword))>=0 || keyword==""){
+                    foundKeyword=true;
+                }else{foundKeyword=false;}
+                //logic to test the date filter
+                var date = new Date(tweet.TweetDate);
+                if(startDate!="" || endDate!=""){
+                    startDate = new Date(startDate);
+                    endDate = new Date(endDate);
+                    if(date >= startDate && date <= endDate){
+                        foundDate=true;
+                    }else{foundDate=false;}
+                }else{foundDate=true;}
+                //logic to test time filter
+                if(startTime!="" || endTime!=""){
+                    const hours = date.getUTCHours();
+                    const minutes = date.getUTCMinutes();
+                    const seconds = date.getUTCSeconds();
+                    const extractedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    const today = new Date().toISOString().slice(0, 10);
+                    const startTimeObj = new Date(`${today}T${startTime}Z`);
+                    const endTimeObj = new Date(`${today}T${endTime}Z`);
+                    const extractedTimeObj = new Date(`${today}T${extractedTime}Z`);
+                    if (extractedTimeObj >= startTimeObj && extractedTimeObj <= endTimeObj) {
+                        foundTime=true;
+                    }else{foundTime=false;}
+                }else{foundTime=true;}
+                //check if all filters apply to the tweet then add it 
+                if(index === -1 && output.length < loopLimit && foundKeyword==true && foundDate==true){
+                    output.push(tweet);
+                }
+            }
         }
-        
+        const slicedOutput = output.slice(0,loopLimit)
+        console.log(slicedOutput);
+        const csvData = objectToCsv(slicedOutput);
+        fs.writeFile ("output.csv", csvData, function(err) {
+            if (err) throw err;
+            console.log('write to csv file complete');
+            }
+        );
+        console.log(output.length);
 
     } catch(err){
         console.error(err);
     }
 }
 
+//Function that executes if we search by keyword
+async function SearchByKeyword(keyword,noResults,startDate,endDate,startTime,endTime){
 
-main("https://twitter.com/javascript");
+}
 
+async function main(searchMetod,username,loopLimit,keyword,startDate,endDate,startTime,endTime){
+    switch(searchMetod){
+    case "Search in user profile":
+        SearchByProfile("javascript",4,"you","2022-01-01","2023-01-01","13:00:00","17:00:00");
+        break;
+    case "Search by keyword":
+        SearchByKeyword("",3,"","","","");
+        break;
+    default:
+        console.log("please choose a method");
+    }
+}
+
+main("Search in user profile");
 
 /* Important 
 *notification pop up selector data-testid="app-bar-close" 
